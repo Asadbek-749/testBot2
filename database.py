@@ -177,9 +177,10 @@ class Database:
     def delete_topic(self, topic):
         with self.transaction() as cur:
             if self.is_postgres:
-                cur.execute("DELETE FROM questions WHERE topic = %s", (topic,))
+                cur.execute("DELETE FROM questions WHERE LOWER(topic) = LOWER(%s)", (topic,))
             else:
-                cur.execute("DELETE FROM questions WHERE topic = ?", (topic,))
+                cur.execute("DELETE FROM questions WHERE LOWER(topic) = LOWER(?)", (topic,))
+            return cur.rowcount
 
     def get_stats(self):
         with self.transaction() as cur:
