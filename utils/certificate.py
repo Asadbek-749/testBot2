@@ -7,7 +7,7 @@ def normalize_text(text):
     # Normalize special unicode characters (like Math Alphanumerics) to standard Latin
     return unicodedata.normalize('NFKD', text)
 
-def generate_certificate(name, topic, score):
+def generate_certificate(name, topic, score, cert_id):
     base_dir = os.path.dirname(os.path.dirname(__file__))
     template_path = os.path.join(base_dir, "template.jpg")
     name = normalize_text(name)
@@ -24,14 +24,16 @@ def generate_certificate(name, topic, score):
         
     try:
         font_name = ImageFont.truetype(font_path, 48)
-        font_topic = ImageFont.truetype(font_path, 28)
-        font_score = ImageFont.truetype(font_path, 28)
-        font_date = ImageFont.truetype(font_path, 20)
+        font_topic = ImageFont.truetype(font_path, 32)
+        font_score = ImageFont.truetype(font_path, 32)
+        font_date = ImageFont.truetype(font_path, 24)
+        font_id = ImageFont.truetype(font_path, 18)
     except IOError:
         font_name = ImageFont.load_default()
         font_topic = ImageFont.load_default()
         font_score = ImageFont.load_default()
         font_date = ImageFont.load_default()
+        font_id = ImageFont.load_default()
 
     img_w, img_h = img.size
     text_color = (13, 27, 42) # Deep navy blue
@@ -44,16 +46,14 @@ def generate_certificate(name, topic, score):
         w = bbox[2] - bbox[0]
         draw.text(((img_w - w) / 2, y), text, fill=fill, font=font)
 
-    # Placing text exactly in the designated empty areas
-    draw_centered_text(img_h * 0.44, name, font_name, gold_color)
-    draw_centered_text(img_h * 0.585, f"{topic}", font_topic, text_color)
+    # Placing text beautifully on the clean image layout
+    draw_centered_text(img_h * 0.46, name, font_name, gold_color)
+    draw_centered_text(img_h * 0.60, f"Mavzu: {topic}", font_topic, text_color)
+    draw_centered_text(img_h * 0.68, f"Natija: {score} ta to'g'ri", font_score, text_color)
+    draw_centered_text(img_h * 0.76, f"Sana: {date_str}", font_date, text_color)
     
-    # Bottom 3 icons alignment
-    # Natija (Left)
-    draw_centered_text(img_h * 0.69, f"{score}", font_score, text_color)
-    
-    # Sana (Center)
-    draw_centered_text(img_h * 0.76, date_str, font_date, text_color)
+    # ID at the bottom right corner
+    draw.text((img_w - 150, img_h - 50), f"ID: #{cert_id:04d}", fill=gold_color, font=font_id)
     
     img.save(output_path)
     return output_path

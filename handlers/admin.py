@@ -96,6 +96,44 @@ async def delete_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Noto'g'ri ID format.")
 
 @check_admin
+async def delete_all_questions_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.delete_all_questions()
+    await update.message.reply_text("Barcha savollar bazadan muvaffaqiyatli o'chirildi! Endi yangi Excel fayl yuklashingiz mumkin.")
+
+@check_admin
+async def delete_topic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Foydalanish: /delete_topic <mavzu_nomi>")
+        return
+    topic = " ".join(context.args)
+    db.delete_topic(topic)
+    await update.message.reply_text(f"'{topic}' mavzusi va uning barcha savollari muvaffaqiyatli o'chirildi.")
+
+@check_admin
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.reply_to_message:
+        await update.message.reply_text("Iltimos, tarqatmoqchi bo'lgan xabaringizga 'Reply' qilib /broadcast deb yozing.")
+        return
+        
+    targets = db.get_all_chats_and_users()
+    if not targets:
+        await update.message.reply_text("Hali bazada xabar yuborish uchun hech qanday foydalanuvchi yoki guruh yo'q.")
+        return
+
+    msg = update.message.reply_to_message
+    success = 0
+    await update.message.reply_text("Xabar tarqatish boshlandi, biroz kuting...")
+    
+    for t_id in targets:
+        try:
+            await msg.copy(chat_id=t_id)
+            success += 1
+        except Exception:
+            pass
+            
+    await update.message.reply_text(f"Xabar {success} ta guruh va foydalanuvchiga muvaffaqiyatli yuborildi.")
+
+@check_admin
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q_count, u_count, r_count = db.get_stats()
     text = (
@@ -197,6 +235,9 @@ def setup_admin_handlers(application):
     application.add_handler(add_question_handler)
     application.add_handler(CommandHandler("list_questions", list_questions))
     application.add_handler(CommandHandler("delete_question", delete_question))
+    application.add_handler(CommandHandler("delete_all", delete_all_questions_command))
+    application.add_handler(CommandHandler("delete_topic", delete_topic_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("schedule_test", schedule_test_command))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_excel_document))

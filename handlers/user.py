@@ -1,6 +1,30 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 from database import db
+import config
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    text = "🤖 *Asadbek Code Club Test Boti*\n\n"
+    text += "👥 *Foydalanuvchi buyruqlari:*\n"
+    text += "📊 /mystats - O'zingizning natijalaringizni ko'rish\n"
+    text += "🏆 /rating - Mavzular bo'yicha kuchlilar reytingini ko'rish\n\n"
+    
+    if user_id in config.ADMIN_IDS:
+        text += "👑 *Admin buyruqlari:*\n"
+        text += "🎮 /test - Guruhda test boshlash\n"
+        text += "➕ /add_question - Bitta yangi savol qo'shish\n"
+        text += "📝 /list_questions - Barcha savollarni ko'rish\n"
+        text += "🗑 /delete_question <ID> - Bitta savolni o'chirish\n"
+        text += "🧹 /delete_topic <Mavzu> - Bitta mavzuni barcha savollari bilan o'chirish\n"
+        text += "🧨 /delete_all - Barcha savollarni butunlay tozalash\n"
+        text += "📊 /stats - Bot va o'yin statistikasini ko'rish\n"
+        text += "🕒 /schedule_test <Mavzu> <HH:MM> - Testni aniq vaqtga rejalashtirish\n"
+        text += "📢 /broadcast - Barchaga xabar tarqatish (e'lon xabariga Reply qilib yoziladi)\n\n"
+        text += "📁 Yoki Excel (.xlsx) faylni botga shunchaki tashlash orqali savollarni yuztalab ommaviy qo'shishingiz mumkin."
+
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 async def mystats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -50,6 +74,8 @@ async def rating_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text)
 
 def setup_user_handlers(application):
+    application.add_handler(CommandHandler("start", help_command))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("mystats", mystats_command))
     application.add_handler(CommandHandler("rating", rating_command))
     application.add_handler(CallbackQueryHandler(rating_callback, pattern="^rating_"))

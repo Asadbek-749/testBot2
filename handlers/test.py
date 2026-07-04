@@ -110,13 +110,14 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
         # Sertifikat uchun (faqat 1-o'rin 0 dan katta ball olsa)
         first_place = top3[0]
         if first_place['score'] > 0:
-            cert_path = generate_certificate(first_place['name'], topic, first_place['score'])
+            cert_id = db.issue_certificate(first_place['user_id'], first_place['name'], topic)
+            cert_path = generate_certificate(first_place['name'], topic, first_place['score'], cert_id)
             with open(cert_path, 'rb') as cert_file:
                 await bot.send_photo(
                     chat_id=chat_id,
                     message_thread_id=thread_id,
                     photo=cert_file,
-                    caption=f"🎉 Tabriklaymiz, {first_place['name']}! Siz 1-o'rinni egalladingiz!"
+                    caption=f"🎉 Tabriklaymiz, {first_place['name']}! Siz 1-o'rinni egalladingiz!\nSertifikat ID: #{cert_id}"
                 )
     
     # 2 daqiqadan so'ng pollarni o'chirish uchun JobQueue

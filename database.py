@@ -71,6 +71,14 @@ class Database:
                         user_name TEXT NOT NULL,
                         is_correct BOOLEAN NOT NULL
                     )
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS certificates (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        name TEXT NOT NULL,
+                        topic TEXT NOT NULL,
+                        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
                 """)
             else:
                 cur.execute("""
@@ -108,6 +116,14 @@ class Database:
                         user_id INTEGER NOT NULL,
                         user_name TEXT NOT NULL,
                         is_correct BOOLEAN NOT NULL
+                    )
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS certificates (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        topic TEXT NOT NULL,
+                        date DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
 
@@ -151,6 +167,17 @@ class Database:
                 cur.execute("DELETE FROM questions WHERE id = %s", (q_id,))
             else:
                 cur.execute("DELETE FROM questions WHERE id = ?", (q_id,))
+
+    def delete_all_questions(self):
+        with self.transaction() as cur:
+            cur.execute("DELETE FROM questions")
+
+    def delete_topic(self, topic):
+        with self.transaction() as cur:
+            if self.is_postgres:
+                cur.execute("DELETE FROM questions WHERE topic = %s", (topic,))
+            else:
+                cur.execute("DELETE FROM questions WHERE topic = ?", (topic,))
 
     def get_stats(self):
         with self.transaction() as cur:
@@ -249,5 +276,32 @@ class Database:
                 cur.execute("SELECT name, MAX(score) as max_score FROM results WHERE topic = ? GROUP BY user_id, name ORDER BY max_score DESC LIMIT 10", (topic,))
             rows = cur.fetchall()
             return [dict(row) for row in rows]
+
+    def issue_certificate(self, user_id, name, topic):
+        with self.transaction() as cur:
+            if self.is_postgres:
+                cur.execute(
+                    "INSERT INTO certificates (user_id, name, topic) VALUES (%s, %s, %s) RETURNING id",
+                    (user_id, name, topic)
+                )
+                cert_id = cur.fetchone()['id']
+            else:
+                cur.execute(
+                    "INSERT INTO certificates (user_id, name, topic) VALUES (?, ?, ?)",
+                    (user_id, name, topic)
+                )
+                cert_id = cur.lastrowid
+            return cert_id
+
+    def get_all_chats_and_users(self):
+        with self.transaction() as cur:
+            cur.execute("SELECT DISTINCT chat_id FROM active_polls")
+            chats = [row['chat_id'] if self.is_postgres else row[0] for row in cur.fetchall()]
+            
+            cur.execute("SELECT DISTINCT user_id FROM results")
+            users = [row['user_id'] if self.is_postgres else row[0] for row in cur.fetchall()]
+            
+            # Combine and remove duplicates
+            return list(set(chats + users))
 
 db = Database()
