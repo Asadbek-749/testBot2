@@ -71,6 +71,7 @@ class Database:
                         user_name TEXT NOT NULL,
                         is_correct BOOLEAN NOT NULL
                     )
+                """)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS certificates (
                         id SERIAL PRIMARY KEY,
@@ -117,6 +118,7 @@ class Database:
                         user_name TEXT NOT NULL,
                         is_correct BOOLEAN NOT NULL
                     )
+                """)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS certificates (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
