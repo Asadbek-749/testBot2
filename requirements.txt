@@ -1,0 +1,5 @@
+python-telegram-bot[job-queue]>=20.0
+psycopg2-binary
+openpyxl
+Pillow
+python-dotenv
