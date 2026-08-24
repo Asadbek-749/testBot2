@@ -12,6 +12,17 @@ from database import db
 from utils.certificate import generate_certificate
 from utils.helpers import check_admin
 
+active_tests = {}
+
+@check_admin
+async def stop_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id in active_tests and active_tests[chat_id]:
+        active_tests[chat_id] = False
+        await update.message.reply_text("🛑 Test darhol to'xtatildi!")
+    else:
+        await update.message.reply_text("Bu guruhda hozir hech qanday test bo'layotgani yo'q.")
+
 @check_admin
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topics = db.get_topics()
@@ -39,6 +50,9 @@ async def topic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thread_id = update.effective_message.message_thread_id
     
     await query.edit_message_text(f"Tanlangan mavzu: {topic}. Test tayyorlanmoqda...")
+    
+    # Register test as active for this chat
+    active_tests[chat_id] = True
     
     # Run test immediately as a background task
     asyncio.create_task(run_test_sequence(context.bot, chat_id, thread_id, topic, context.job_queue))
@@ -87,8 +101,21 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
         # Save active poll for tracking
         db.add_active_poll(poll_id, chat_id, correct_option_id)
         
-        await asyncio.sleep(20)
+        # Checking roughly every second to respond quickly to /stop_test
+        for _ in range(20):
+            if not active_tests.get(chat_id, False):
+                break
+            await asyncio.sleep(1)
+            
+        if not active_tests.get(chat_id, False):
+            await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text="⚠️ Test admin tomonidan majburiy to'xtatildi! Savollar o'chirilmoqda...")
+            job_queue.run_once(delete_polls_job, 1, data={'chat_id': chat_id, 'message_ids': poll_message_ids})
+            return
     
+    # Final check before results
+    if not active_tests.get(chat_id, False):
+        return
+        
     await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text="Natijalar hisoblanmoqda...")
     await asyncio.sleep(2) # Give a little time for final answers to process
     
@@ -154,5 +181,6 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 def setup_test_handlers(application):
     application.add_handler(CommandHandler("test", test_command))
+    application.add_handler(CommandHandler("stop_test", stop_test_command))
     application.add_handler(CallbackQueryHandler(topic_callback, pattern="^topic_"))
     application.add_handler(PollAnswerHandler(handle_poll_answer))

@@ -106,8 +106,12 @@ async def delete_topic_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Foydalanish: /delete_topic <mavzu_nomi>")
         return
     topic = " ".join(context.args)
-    db.delete_topic(topic)
-    await update.message.reply_text(f"'{topic}' mavzusi va uning barcha savollari muvaffaqiyatli o'chirildi.")
+    deleted_count = db.delete_topic(topic)
+    
+    if deleted_count > 0:
+        await update.message.reply_text(f"'{topic}' mavzusi va uning barcha ({deleted_count} ta) savollari muvaffaqiyatli o'chirildi.")
+    else:
+        await update.message.reply_text(f"'{topic}' nomli mavzu topilmadi. Harflar katta-kichikligiga e'tibor bermasdan yozsangiz ham bo'ladi, lekin yozilishi aniq bo'lishi kerak (Masalan: MS Excel).")
 
 @check_admin
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
