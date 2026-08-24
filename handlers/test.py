@@ -25,6 +25,11 @@ async def stop_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @check_admin
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if active_tests.get(chat_id, False):
+        await update.message.reply_text("Bu guruhda allaqachon bitta test davom etmoqda. Avval uni tugatishini kuting yoki /stop_test orqali to'xtating.")
+        return
+
     topics = db.get_topics()
     if not topics:
         await update.message.reply_text("Bazada savollar yo'q.")
@@ -39,6 +44,16 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def topic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    
+    if update.effective_user.id not in config.ADMIN_IDS:
+        await query.answer("Bu tugmani faqat admin bosa oladi!", show_alert=True)
+        return
+    
+    chat_id = update.effective_chat.id
+    if active_tests.get(chat_id, False):
+        await query.answer("Bu guruhda allaqachon test ketyapti!", show_alert=True)
+        return
+        
     await query.answer()
     
     if not query.data.startswith("topic_"):
@@ -153,6 +168,9 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
         120,
         data={'chat_id': chat_id, 'message_ids': poll_message_ids}
     )
+    
+    # Mark test as finished
+    active_tests[chat_id] = False
 
 async def delete_polls_job(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
