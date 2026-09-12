@@ -232,7 +232,7 @@ class Database:
                 FROM poll_answers 
                 WHERE poll_id IN ({placeholders}) AND is_correct = TRUE 
                 GROUP BY user_id, user_name 
-                ORDER BY score DESC
+                ORDER BY score DESC, SUM(id) ASC
             '''
             cur.execute(query, tuple(poll_ids))
             rows = cur.fetchall()
