@@ -7,8 +7,11 @@ import config
 from database import db
 from utils.certificate import generate_certificate
 from utils.helpers import check_admin
+import time
 
 active_tests = {}
+poll_send_times = {}
+user_test_times = {}
 
 @check_admin
 async def stop_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,11 +78,13 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
         
     random.shuffle(questions)
     
-    await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text=f"🎉 Test boshlandi! Mavzu: {topic}\nJami savollar: {len(questions)}")
+    await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text=f"🎉 Test boshlandi! Mavzu: {topic}\\nJami savollar: {len(questions)}")
     
     poll_message_ids = []
     poll_ids = []
     total_q = len(questions)
+    
+    user_test_times[chat_id] = {}
     
     for i, q in enumerate(questions):
         options = [q['opt1'], q['opt2'], q['opt3']]
@@ -104,6 +109,9 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
         poll_ids.append(poll_id)
         poll_message_ids.append(message.message_id)
         
+        # Track time
+        poll_send_times[poll_id] = time.time()
+        
         # Save active poll for tracking
         db.add_active_poll(poll_id, chat_id, correct_option_id)
         
@@ -127,6 +135,13 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
     
     results = db.get_test_results(poll_ids)
     
+    # Calculate time taken for each user and sort
+    chat_times = user_test_times.get(chat_id, {})
+    for r in results:
+        r['time_taken'] = chat_times.get(r['user_id'], 999.0)
+        
+    results.sort(key=lambda x: (-x['score'], x['time_taken']))
+    
     # Save results to db
     db.save_final_results(results, topic)
     
@@ -136,7 +151,14 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
         text = "🏆 Barcha ishtirokchilar reytingi (tezlik va natija bo'yicha):\n\n"
         for i, res in enumerate(results):
             safe_name = html.escape(str(res['name']))
-            text += f"{i+1}. <a href='tg://user?id={res['user_id']}'>{safe_name}</a> - {res['score']} ta to'g'ri\n"
+            t_sec = res.get('time_taken', 0)
+            if t_sec == 999.0: t_sec = 0
+            
+            m = int(t_sec // 60)
+            s = int(t_sec % 60)
+            time_str = f"{m}m {s}s" if m > 0 else f"{s}s"
+            
+            text += f"{i+1}. <a href='tg://user?id={res['user_id']}'>{safe_name}</a> - {res['score']} ta to'g'ri ({time_str})\n"
         
         await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text=text, parse_mode='HTML')
         
@@ -162,6 +184,12 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
     
     # Mark test as finished
     active_tests[chat_id] = False
+    
+    # Cleanup memory
+    if chat_id in user_test_times:
+        del user_test_times[chat_id]
+    for pid in poll_ids:
+        poll_send_times.pop(pid, None)
 
 async def delete_polls_job(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
@@ -179,11 +207,25 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     poll_id = answer.poll_id
     user_id = answer.user.id
     user_name = answer.user.first_name
+    answer_time = time.time()
     
     # Check if this poll is in our active test
     active_poll = db.get_active_poll(poll_id)
     if active_poll:
+        chat_id = active_poll['chat_id']
         correct_option_id = active_poll['correct_option_id']
+        
+        # Calculate time taken
+        sent_time = poll_send_times.get(poll_id, answer_time)
+        time_taken = answer_time - sent_time
+        
+        if chat_id not in user_test_times:
+            user_test_times[chat_id] = {}
+        if user_id not in user_test_times[chat_id]:
+            user_test_times[chat_id][user_id] = 0
+            
+        user_test_times[chat_id][user_id] += time_taken
+        
         is_correct = answer.option_ids and answer.option_ids[0] == correct_option_id
         
         db.add_poll_answer(poll_id, user_id, user_name, is_correct)
