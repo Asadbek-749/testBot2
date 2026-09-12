@@ -95,7 +95,8 @@ def generate_certificate(name, topic, score, cert_id):
     col2_center = safe_left + col_width * 1.5
     col3_center = safe_left + col_width * 2.5
     
-    base_y = img_h * 0.65
+    # ZONE 2: Information section (Raised to avoid the shield in ZONE 3)
+    base_y = img_h * 0.54
     val_y = base_y + 35
     
     # Labels
@@ -117,7 +118,7 @@ def generate_certificate(name, topic, score, cert_id):
     draw.line([(sep_x1, sep_y1), (sep_x1, sep_y2)], fill=gold_color, width=2)
     draw.line([(sep_x2, sep_y1), (sep_x2, sep_y2)], fill=gold_color, width=2)
     
-    # ID at the bottom right corner
+    # ZONE 5: ID at the bottom right corner
     bbox_id = draw.textbbox((0, 0), f"ID: #{cert_id:04d}", font=font_id)
     w_id = bbox_id[2] - bbox_id[0]
     draw.text((img_w - w_id - 40, img_h - 40), f"ID: #{cert_id:04d}", fill=gold_color, font=font_id)
