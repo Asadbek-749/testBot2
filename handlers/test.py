@@ -1,5 +1,6 @@
 import asyncio
 import random
+import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, CallbackQueryHandler, PollAnswerHandler, ContextTypes
 import config
@@ -78,15 +79,20 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
     
     poll_message_ids = []
     poll_ids = []
+    total_q = len(questions)
     
-    for q in questions:
+    for i, q in enumerate(questions):
         options = [q['opt1'], q['opt2'], q['opt3']]
         correct_option_id = q['correct_id'] - 1
         
+        q_text = f"[{i+1}/{total_q}] {q['text']}"
+        if len(q_text) > 300:
+            q_text = q_text[:297] + "..."
+            
         message = await bot.send_poll(
             chat_id=chat_id,
             message_thread_id=thread_id,
-            question=q['text'],
+            question=q_text,
             options=options,
             type='quiz',
             correct_option_id=correct_option_id,
@@ -127,15 +133,15 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
     if not results:
         await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text="Hozirgi testda hech kim to'g'ri javob topmadi.")
     else:
-        top3 = results[:3]
-        text = "🏆 Top 3 ishtirokchilar:\n\n"
-        for i, res in enumerate(top3):
-            text += f"{i+1}. {res['name']} - {res['score']} ta to'g'ri\n"
+        text = "🏆 Barcha ishtirokchilar reytingi (tezlik va natija bo'yicha):\n\n"
+        for i, res in enumerate(results):
+            safe_name = html.escape(str(res['name']))
+            text += f"{i+1}. <a href='tg://user?id={res['user_id']}'>{safe_name}</a> - {res['score']} ta to'g'ri\n"
         
-        await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text=text)
+        await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text=text, parse_mode='HTML')
         
         # Sertifikat uchun (faqat 1-o'rin 0 dan katta ball olsa)
-        first_place = top3[0]
+        first_place = results[0]
         if first_place['score'] > 0:
             cert_id = db.issue_certificate(first_place['user_id'], first_place['name'], topic)
             cert_path = generate_certificate(first_place['name'], topic, first_place['score'], cert_id)
