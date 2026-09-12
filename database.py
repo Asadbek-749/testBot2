@@ -10,32 +10,26 @@ class Database:
         if self.is_postgres:
             self.conn = psycopg2.connect(config.DATABASE_URL)
         else:
-            self.conn = sqlite3.connect(config.SQLITE_PATH, check_same_thread=False)
+            self.conn = sqlite3.connect('database.sqlite3', check_same_thread=False)
             self.conn.row_factory = sqlite3.Row
-        
-        self.create_tables()
-
-    def get_cursor(self):
-        if self.is_postgres:
-            return self.conn.cursor(cursor_factory=RealDictCursor)
-        return self.conn.cursor()
+        self.init_db()
 
     @contextmanager
     def transaction(self):
-        cursor = self.get_cursor()
+        cur = self.conn.cursor(cursor_factory=RealDictCursor) if self.is_postgres else self.conn.cursor()
         try:
-            yield cursor
+            yield cur
             self.conn.commit()
         except Exception as e:
             self.conn.rollback()
             raise e
         finally:
-            cursor.close()
+            cur.close()
 
-    def create_tables(self):
+    def init_db(self):
         with self.transaction() as cur:
             if self.is_postgres:
-                cur.execute("""
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS questions (
                         id SERIAL PRIMARY KEY,
                         text TEXT NOT NULL,
@@ -45,8 +39,8 @@ class Database:
                         correct_id INTEGER NOT NULL,
                         topic TEXT NOT NULL
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS results (
                         id SERIAL PRIMARY KEY,
                         user_id BIGINT NOT NULL,
@@ -55,15 +49,15 @@ class Database:
                         score INTEGER NOT NULL,
                         date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS active_polls (
                         poll_id TEXT PRIMARY KEY,
                         chat_id BIGINT NOT NULL,
                         correct_option_id INTEGER NOT NULL
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS poll_answers (
                         id SERIAL PRIMARY KEY,
                         poll_id TEXT NOT NULL,
@@ -71,8 +65,8 @@ class Database:
                         user_name TEXT NOT NULL,
                         is_correct BOOLEAN NOT NULL
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS certificates (
                         id SERIAL PRIMARY KEY,
                         user_id BIGINT NOT NULL,
@@ -80,9 +74,9 @@ class Database:
                         topic TEXT NOT NULL,
                         date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
-                """)
+                ''')
             else:
-                cur.execute("""
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS questions (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         text TEXT NOT NULL,
@@ -92,8 +86,8 @@ class Database:
                         correct_id INTEGER NOT NULL,
                         topic TEXT NOT NULL
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS results (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER NOT NULL,
@@ -102,15 +96,15 @@ class Database:
                         score INTEGER NOT NULL,
                         date DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS active_polls (
                         poll_id TEXT PRIMARY KEY,
                         chat_id INTEGER NOT NULL,
                         correct_option_id INTEGER NOT NULL
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS poll_answers (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         poll_id TEXT NOT NULL,
@@ -118,8 +112,8 @@ class Database:
                         user_name TEXT NOT NULL,
                         is_correct BOOLEAN NOT NULL
                     )
-                """)
-                cur.execute("""
+                ''')
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS certificates (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER NOT NULL,
@@ -127,7 +121,7 @@ class Database:
                         topic TEXT NOT NULL,
                         date DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                """)
+                ''')
 
     def add_question(self, text, opt1, opt2, opt3, correct_id, topic):
         with self.transaction() as cur:
@@ -156,13 +150,13 @@ class Database:
                 cur.execute("SELECT * FROM questions WHERE topic = ?", (topic,))
             rows = cur.fetchall()
             return [dict(row) for row in rows]
-            
+
     def get_all_questions(self):
         with self.transaction() as cur:
             cur.execute("SELECT * FROM questions")
             rows = cur.fetchall()
             return [dict(row) for row in rows]
-            
+
     def delete_question(self, q_id):
         with self.transaction() as cur:
             if self.is_postgres:
@@ -185,14 +179,13 @@ class Database:
     def get_stats(self):
         with self.transaction() as cur:
             cur.execute("SELECT COUNT(*) FROM questions")
-            q_count = cur.fetchone()['count' if self.is_postgres else 0] if self.is_postgres else cur.fetchone()[0]
+            q_count = cur.fetchone()['count'] if self.is_postgres else cur.fetchone()[0]
             
             cur.execute("SELECT COUNT(DISTINCT user_id) FROM results")
-            u_count = cur.fetchone()['count' if self.is_postgres else 0] if self.is_postgres else cur.fetchone()[0]
+            u_count = cur.fetchone()['count'] if self.is_postgres else cur.fetchone()[0]
             
             cur.execute("SELECT COUNT(*) FROM results")
-            r_count = cur.fetchone()['count' if self.is_postgres else 0] if self.is_postgres else cur.fetchone()[0]
-            
+            r_count = cur.fetchone()['count'] if self.is_postgres else cur.fetchone()[0]
             return q_count, u_count, r_count
 
     def add_active_poll(self, poll_id, chat_id, correct_option_id):
@@ -231,36 +224,33 @@ class Database:
                 )
 
     def get_test_results(self, poll_ids):
-        if not poll_ids:
-            return []
-        
         with self.transaction() as cur:
+            if not poll_ids: return []
             placeholders = ','.join(['%s' if self.is_postgres else '?'] * len(poll_ids))
-            query = f"""
-                SELECT user_id, MAX(user_name) as name, SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as score
-                FROM poll_answers
-                WHERE poll_id IN ({placeholders})
-                GROUP BY user_id
+            query = f'''
+                SELECT user_id, user_name as name, COUNT(*) as score 
+                FROM poll_answers 
+                WHERE poll_id IN ({placeholders}) AND is_correct = TRUE 
+                GROUP BY user_id, user_name 
                 ORDER BY score DESC
-            """
+            '''
             cur.execute(query, tuple(poll_ids))
             rows = cur.fetchall()
             return [dict(row) for row in rows]
-            
-    def save_final_results(self, results_data, topic):
+
+    def save_final_results(self, results, topic):
         with self.transaction() as cur:
-            for res in results_data:
-                if res['score'] > 0:
-                    if self.is_postgres:
-                        cur.execute(
-                            "INSERT INTO results (user_id, name, topic, score) VALUES (%s, %s, %s, %s)",
-                            (res['user_id'], res['name'], topic, res['score'])
-                        )
-                    else:
-                        cur.execute(
-                            "INSERT INTO results (user_id, name, topic, score) VALUES (?, ?, ?, ?)",
-                            (res['user_id'], res['name'], topic, res['score'])
-                        )
+            for r in results:
+                if self.is_postgres:
+                    cur.execute(
+                        "INSERT INTO results (user_id, name, topic, score) VALUES (%s, %s, %s, %s)",
+                        (r['user_id'], r['name'], topic, r['score'])
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO results (user_id, name, topic, score) VALUES (?, ?, ?, ?)",
+                        (r['user_id'], r['name'], topic, r['score'])
+                    )
 
     def get_user_stats(self, user_id):
         with self.transaction() as cur:
@@ -304,7 +294,6 @@ class Database:
             cur.execute("SELECT DISTINCT user_id FROM results")
             users = [row['user_id'] if self.is_postgres else row[0] for row in cur.fetchall()]
             
-            # Combine and remove duplicates
             return list(set(chats + users))
 
 db = Database()

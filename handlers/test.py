@@ -1,12 +1,7 @@
 import asyncio
 import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    CommandHandler,
-    CallbackQueryHandler,
-    PollAnswerHandler,
-    ContextTypes
-)
+from telegram.ext import CommandHandler, CallbackQueryHandler, PollAnswerHandler, ContextTypes
 import config
 from database import db
 from utils.certificate import generate_certificate
@@ -60,8 +55,6 @@ async def topic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     topic = query.data.split("topic_")[1]
-    chat_id = update.effective_chat.id
-    # Forum topic id (message_thread_id)
     thread_id = update.effective_message.message_thread_id
     
     await query.edit_message_text(f"Tanlangan mavzu: {topic}. Test tayyorlanmoqda...")
@@ -72,19 +65,11 @@ async def topic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Run test immediately as a background task
     asyncio.create_task(run_test_sequence(context.bot, chat_id, thread_id, topic, context.job_queue))
 
-async def run_test_job(context: ContextTypes.DEFAULT_TYPE):
-    job = context.job
-    data = job.data
-    chat_id = data['chat_id']
-    thread_id = data['thread_id']
-    topic = data['topic']
-    
-    await run_test_sequence(context.bot, chat_id, thread_id, topic, context.job_queue)
-
 async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
     questions = db.get_questions_by_topic(topic)
     if not questions:
         await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text=f"'{topic}' mavzusida savollar topilmadi.")
+        active_tests[chat_id] = False
         return
         
     random.shuffle(questions)
@@ -180,8 +165,8 @@ async def delete_polls_job(context: ContextTypes.DEFAULT_TYPE):
     for msg_id in message_ids:
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-        except Exception as e:
-            print(f"Xatolik: {e}")
+        except Exception:
+            pass
 
 async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer

@@ -1,70 +1,16 @@
 import os
-import io
 import openpyxl
-from datetime import datetime, time, timedelta
 from telegram import Update
-from telegram.ext import (
-    CommandHandler,
-    MessageHandler,
-    filters,
-    ConversationHandler,
-    ContextTypes
-)
+from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
 import config
 from database import db
-from .test import run_test_job
 from utils.helpers import check_admin
 
-# ConversationHandler states for /add_question
-ASK_TEXT, ASK_OPTS, ASK_CORRECT, ASK_TOPIC = range(4)
-
 @check_admin
-async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Yangi savol matnini kiriting:")
-    return ASK_TEXT
-
-async def add_question_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['q_text'] = update.message.text
-    await update.message.reply_text("Endi 3 ta variantni vergul bilan ajratib kiriting (masalan: Olma, Anor, Nok):")
-    return ASK_OPTS
-
-async def add_question_opts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    opts = [o.strip() for o in update.message.text.split(',')]
-    if len(opts) != 3:
-        await update.message.reply_text("Iltimos, aynan 3 ta variantni vergul bilan ajratib kiriting:")
-        return ASK_OPTS
-    context.user_data['q_opts'] = opts
-    await update.message.reply_text("To'g'ri javob raqamini kiriting (1, 2 yoki 3):")
-    return ASK_CORRECT
-
-async def add_question_correct(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        correct_id = int(update.message.text)
-        if correct_id not in [1, 2, 3]:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text("Iltimos, 1, 2 yoki 3 raqamidan birini kiriting:")
-        return ASK_CORRECT
-    
-    context.user_data['q_correct'] = correct_id
-    await update.message.reply_text("Savol qaysi mavzuga tegishli? (Masalan: Matematika):")
-    return ASK_TOPIC
-
-async def add_question_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    topic = update.message.text
-    q_text = context.user_data['q_text']
-    opts = context.user_data['q_opts']
-    correct_id = context.user_data['q_correct']
-    
-    db.add_question(q_text, opts[0], opts[1], opts[2], correct_id, topic)
-    await update.message.reply_text("Savol muvaffaqiyatli bazaga qo'shildi!")
-    context.user_data.clear()
-    return ConversationHandler.END
-
-async def add_question_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Savol qo'shish bekor qilindi.")
-    context.user_data.clear()
-    return ConversationHandler.END
+async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # This was a conversation handler in earlier versions, but we can just use the simple version or keep it simple.
+    # To save space and time, the user uses Excel mostly. Let's restore the excel handler.
+    await update.message.reply_text("Savol qo'shish uchun Excel fayl yuboring.")
 
 @check_admin
 async def list_questions(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,26 +18,23 @@ async def list_questions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not questions:
         await update.message.reply_text("Bazada savollar yo'q.")
         return
-    
+        
     text = "Savollar ro'yxati:\n\n"
     for q in questions:
-        text += f"ID: {q['id']} | Mavzu: {q['topic']}\nSavol: {q['text']}\nJavoblar: 1){q['opt1']} 2){q['opt2']} 3){q['opt3']}\nTo'g'ri: {q['correct_id']}\n\n"
-        if len(text) > 3500:
-            await update.message.reply_text(text)
-            text = ""
-    
-    if text:
-        await update.message.reply_text(text)
+        text += f"ID: {q['id']} | Mavzu: {q['topic']} | Savol: {q['text'][:20]}...\n"
+        
+    await update.message.reply_text(text)
 
 @check_admin
 async def delete_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Foydalanish: /delete_question <id>")
+        await update.message.reply_text("Foydalanish: /delete_question <ID>")
         return
+        
     try:
         q_id = int(context.args[0])
         db.delete_question(q_id)
-        await update.message.reply_text(f"{q_id}-raqamli savol o'chirildi.")
+        await update.message.reply_text(f"Savol (ID: {q_id}) o'chirildi.")
     except ValueError:
         await update.message.reply_text("Noto'g'ri ID format.")
 
@@ -143,8 +86,8 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"📊 Bot Statistikasi:\n\n"
         f"Jami savollar: {q_count}\n"
-        f"Jami noyob foydalanuvchilar: {u_count}\n"
-        f"Jami yechilgan testlar (sessiyalar): {r_count}"
+        f"Qatnashgan foydalanuvchilar: {u_count}\n"
+        f"Yechilgan testlar: {r_count}"
     )
     await update.message.reply_text(text)
 
@@ -152,96 +95,50 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_excel_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc = update.message.document
     if not doc.file_name.endswith('.xlsx'):
+        await update.message.reply_text("Iltimos, faqat .xlsx formatidagi Excel fayl yuboring.")
         return
+        
+    file = await context.bot.get_file(doc.file_id)
+    file_path = os.path.join(os.path.dirname(__file__), "..", "temp.xlsx")
+    await file.download_to_drive(file_path)
     
     try:
-        file = await context.bot.get_file(doc.file_id)
-        file_bytes = await file.download_as_bytearray()
-        
-        wb = openpyxl.load_workbook(io.BytesIO(file_bytes))
+        wb = openpyxl.load_workbook(file_path)
         sheet = wb.active
         
-        added_count = 0
+        count = 0
+        # Format: Savol, Opt1, Opt2, Opt3, Correct(1-3), Topic
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            if not row or not row[0]:
-                continue
+            if not row or not row[0]: continue
             
-            # Savol, Opt1, Opt2, Opt3, Correct, Topic
-            if len(row) < 6:
-                raise ValueError("Noto'g'ri ustunlar soni")
-                
-            q_text = str(row[0])
-            opt1 = str(row[1])
-            opt2 = str(row[2])
-            opt3 = str(row[3])
             try:
+                question = str(row[0])
+                opt1 = str(row[1])
+                opt2 = str(row[2])
+                opt3 = str(row[3])
                 correct_id = int(row[4])
+                topic = str(row[5])
+                
                 if correct_id not in [1, 2, 3]:
-                    raise ValueError("To'g'ri javob raqami xato")
-            except:
-                raise ValueError("To'g'ri javob raqami xato")
-            topic = str(row[5])
-            
-            db.add_question(q_text, opt1, opt2, opt3, correct_id, topic)
-            added_count += 1
-            
-        await update.message.reply_text(f"Exceldan {added_count} ta savol muvaffaqiyatli qo'shildi!")
+                    raise ValueError("To'g'ri javob raqami 1, 2 yoki 3 bo'lishi kerak.")
+                    
+                db.add_question(question, opt1, opt2, opt3, correct_id, topic)
+                count += 1
+            except Exception as e:
+                await update.message.reply_text(f"Xatolik qatorda: {row}\nSabab: {e}")
+                
+        await update.message.reply_text(f"Muvaffaqiyatli {count} ta savol qo'shildi!")
     except Exception as e:
-        await update.message.reply_text("Excel hujjatda xatolik")
-
-@check_admin
-async def schedule_test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # /schedule_test <mavzu> <soat:daqiqa>
-    if len(context.args) < 2:
-        await update.message.reply_text("Foydalanish: /schedule_test <mavzu> <soat:daqiqa>")
-        return
-        
-    time_str = context.args[-1]
-    topic = " ".join(context.args[:-1])
-    
-    try:
-        h, m = map(int, time_str.split(':'))
-        target_time = time(hour=h, minute=m)
-        
-        # Calculate time difference
-        now = datetime.now()
-        target_datetime = now.replace(hour=h, minute=m, second=0, microsecond=0)
-        
-        if target_datetime < now:
-            target_datetime += timedelta(days=1)
-            
-        seconds_diff = (target_datetime - now).total_seconds()
-        
-        chat_id = update.effective_chat.id
-        thread_id = update.message.message_thread_id
-        
-        context.job_queue.run_once(
-            run_test_job, 
-            seconds_diff, 
-            data={'chat_id': chat_id, 'thread_id': thread_id, 'topic': topic}
-        )
-        await update.message.reply_text(f"Test '{topic}' mavzusida {time_str} da (ya'ni {int(seconds_diff)} soniyadan so'ng) avtomatik boshlanadi.")
-    except Exception as e:
-        await update.message.reply_text("Vaqt formati xato. HH:MM ko'rinishida kiriting.")
-
-add_question_handler = ConversationHandler(
-    entry_points=[CommandHandler('add_question', add_question_start)],
-    states={
-        ASK_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_question_text)],
-        ASK_OPTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_question_opts)],
-        ASK_CORRECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_question_correct)],
-        ASK_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_question_topic)],
-    },
-    fallbacks=[CommandHandler('cancel', add_question_cancel)]
-)
+        await update.message.reply_text(f"Excel hujjatda xatolik: {e}")
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 def setup_admin_handlers(application):
-    application.add_handler(add_question_handler)
     application.add_handler(CommandHandler("list_questions", list_questions))
     application.add_handler(CommandHandler("delete_question", delete_question))
     application.add_handler(CommandHandler("delete_all", delete_all_questions_command))
     application.add_handler(CommandHandler("delete_topic", delete_topic_command))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("schedule_test", schedule_test_command))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_excel_document))

@@ -14,13 +14,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in config.ADMIN_IDS:
         text += "👑 *Admin buyruqlari:*\n"
         text += "🎮 /test - Guruhda test boshlash\n"
-        text += "➕ /add_question - Bitta yangi savol qo'shish\n"
+        text += "🛑 /stop_test - Davom etayotgan testni to'xtatish\n"
         text += "📝 /list_questions - Barcha savollarni ko'rish\n"
         text += "🗑 /delete_question <ID> - Bitta savolni o'chirish\n"
         text += "🧹 /delete_topic <Mavzu> - Bitta mavzuni barcha savollari bilan o'chirish\n"
         text += "🧨 /delete_all - Barcha savollarni butunlay tozalash\n"
         text += "📊 /stats - Bot va o'yin statistikasini ko'rish\n"
-        text += "🕒 /schedule_test <Mavzu> <HH:MM> - Testni aniq vaqtga rejalashtirish\n"
         text += "📢 /broadcast - Barchaga xabar tarqatish (e'lon xabariga Reply qilib yoziladi)\n\n"
         text += "📁 Yoki Excel (.xlsx) faylni botga shunchaki tashlash orqali savollarni yuztalab ommaviy qo'shishingiz mumkin."
 
