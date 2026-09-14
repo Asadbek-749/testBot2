@@ -94,17 +94,21 @@ async def run_test_sequence(bot, chat_id, thread_id, topic, job_queue):
         if len(q_text) > 300:
             q_text = q_text[:297] + "..."
             
-        message = await bot.send_poll(
-            chat_id=chat_id,
-            message_thread_id=thread_id,
-            question=q_text,
-            options=options,
-            type='quiz',
-            correct_option_id=correct_option_id,
-            is_anonymous=False,
-            open_period=20
-        )
-        
+        try:
+            message = await bot.send_poll(
+                chat_id=chat_id,
+                message_thread_id=thread_id,
+                question=q_text,
+                options=options,
+                type='quiz',
+                correct_option_id=correct_option_id,
+                is_anonymous=False,
+                open_period=20
+            )
+        except Exception as e:
+            await bot.send_message(chat_id=chat_id, message_thread_id=thread_id, text=f"⚠️ {i+1}-savolni yuborishda xatolik yuz berdi (ehtimol variantlar bir xil bo'lib qolgan). U o'tkazib yuborildi.")
+            continue
+            
         poll_id = message.poll.id
         poll_ids.append(poll_id)
         poll_message_ids.append(message.message_id)
